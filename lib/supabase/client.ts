@@ -1,8 +1,16 @@
 // lib/supabase/client.ts
 import { createBrowserClient } from "@supabase/ssr"
 
-export const createClient = () =>
-  createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+export function getSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!url || !key) {
+    throw new Error("Missing Supabase environment variables")
+  }
+
+  return createBrowserClient(url, key)
+}
+
+// Backward-compatible alias for existing imports in the codebase.
+export const createClient = getSupabaseClient
