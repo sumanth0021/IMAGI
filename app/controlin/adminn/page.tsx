@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = "force-dynamic"
+
 import { useEffect, useState, useRef, type ReactNode } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
@@ -8,9 +10,8 @@ import {
   X, ChevronRight, Loader2, LayoutGrid, List, Lock,
   Plus, Pencil, EyeOff, Check, ImageIcon, MonitorPlay, Mail,
 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+import { getSupabase } from "@/lib/supabase"
 
-const supabase = createClient()
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? ""
 const FALLBACK_SIGNUP_IMAGE = "https://i.pinimg.com/736x/4f/c0/09/4fc00962e19608e4b97523e662444507.jpg"
 
@@ -78,9 +79,9 @@ function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
     e.preventDefault()
     setLoading(true)
     setError("")
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error: authError } = await getSupabase().auth.signInWithPassword({ email, password })
     if (authError || !data.user) { setError(authError?.message ?? "Sign-in failed."); setLoading(false); return }
-    if (data.user.email !== ADMIN_EMAIL) { await supabase.auth.signOut(); setError("Access denied."); setLoading(false); return }
+    if (data.user.email !== ADMIN_EMAIL) { await getSupabase().auth.signOut(); setError("Access denied."); setLoading(false); return }
     setLoading(false)
     onSuccess()
   }
@@ -366,7 +367,7 @@ function SignupImageManager() {
 
   useEffect(() => {
     const fetchImage = async () => {
-      const { data } = await supabase
+      const { data } = await getSupabase()
         .from("site_settings")
         .select("value")
         .eq("key", "signup_image_url")
@@ -390,14 +391,14 @@ function SignupImageManager() {
     try {
       const ext = imageFile.name.split(".").pop()
       const path = `signup/signup-image-${Date.now()}.${ext}`
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await getSupabase().storage
         .from("content")
         .upload(path, imageFile, { upsert: true })
       if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`)
 
-      const { data: urlData } = supabase.storage.from("content").getPublicUrl(path)
+      const { data: urlData } = getSupabase().storage.from("content").getPublicUrl(path)
 
-      const { error: upsertError } = await supabase
+      const { error: upsertError } = await getSupabase()
         .from("site_settings")
         .upsert({ key: "signup_image_url", value: urlData.publicUrl }, { onConflict: "key" })
       if (upsertError) throw new Error(`site_settings upsert failed: ${upsertError.message}`)
@@ -425,7 +426,7 @@ function SignupImageManager() {
     if (!confirm("Reset to the default image?")) return
     setResetting(true)
     try {
-      await supabase
+      await getSupabase()
         .from("site_settings")
         .upsert({ key: "signup_image_url", value: FALLBACK_SIGNUP_IMAGE }, { onConflict: "key" })
       setCurrentImage(FALLBACK_SIGNUP_IMAGE)
@@ -591,7 +592,7 @@ function ContactSettingsManager() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
           .from("site_settings")
           .select("key, value")
           .in("key", ["contact_email", "social_instagram_url", "social_youtube_url", "social_facebook_url", "social_x_url"])
@@ -640,7 +641,7 @@ function ContactSettingsManager() {
       const nextFacebook = facebookUrl.trim()
       const nextX = xUrl.trim()
 
-      const { error } = await supabase
+      const { error } = await getSupabase()
         .from("site_settings")
         .upsert([
           { key: "contact_email", value: nextEmail },
@@ -817,7 +818,7 @@ function HeroManager() {
 
   const fetchHeroes = async () => {
     setHeroLoading(true)
-    const { data } = await supabase.from("hero_content").select("*").order("created_at", { ascending: false })
+    const { data } = await getSupabase().from("hero_content").select("*").order("created_at", { ascending: false })
     setHeroes((data as Hero[]) ?? [])
     setHeroLoading(false)
   }
@@ -843,9 +844,9 @@ function HeroManager() {
   const uploadImage = async (file: File): Promise<string | null> => {
     const ext = file.name.split(".").pop()
     const path = `hero/${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from("content").upload(path, file, { upsert: true })
+    const { error } = await getSupabase().storage.from("content").upload(path, file, { upsert: true })
     if (error) return null
-    const { data } = supabase.storage.from("content").getPublicUrl(path)
+    const { data } = getSupabase().storage.from("content").getPublicUrl(path)
     return data.publicUrl
   }
 
@@ -861,11 +862,11 @@ function HeroManager() {
     }
     const payload = { title: form.title, subtitle: form.subtitle || null, description: form.description || null, image_url, cta_text: form.cta_text || null, cta_link: form.cta_link || null, is_active: form.is_active }
     if (editingId) {
-      const { error } = await supabase.from("hero_content").update(payload).eq("id", editingId)
+      const { error } = await getSupabase().from("hero_content").update(payload).eq("id", editingId)
       if (error) { showHeroToast("Update failed: " + error.message, "error"); setHeroSaving(false); return }
       showHeroToast("Hero updated!")
     } else {
-      const { error } = await supabase.from("hero_content").insert(payload)
+      const { error } = await getSupabase().from("hero_content").insert(payload)
       if (error) { showHeroToast("Save failed: " + error.message, "error"); setHeroSaving(false); return }
       showHeroToast("Hero added!")
     }
@@ -876,13 +877,13 @@ function HeroManager() {
 
   const handleDeleteHero = async (id: string) => {
     if (!confirm("Delete this hero?")) return
-    await supabase.from("hero_content").delete().eq("id", id)
+    await getSupabase().from("hero_content").delete().eq("id", id)
     showHeroToast("Hero deleted")
     fetchHeroes()
   }
 
   const toggleActive = async (hero: Hero) => {
-    await supabase.from("hero_content").update({ is_active: !hero.is_active }).eq("id", hero.id)
+    await getSupabase().from("hero_content").update({ is_active: !hero.is_active }).eq("id", hero.id)
     fetchHeroes()
   }
 
@@ -1073,12 +1074,12 @@ export default function AdminPage() {
 
   useEffect(() => {
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session } } = await getSupabase().auth.getSession()
       if (session?.user?.email === ADMIN_EMAIL) setAuthed(true)
       setAuthChecked(true)
     }
     checkSession()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = getSupabase().auth.onAuthStateChange((_event, session) => {
       setAuthed(session?.user?.email === ADMIN_EMAIL)
     })
     return () => subscription.unsubscribe()
@@ -1087,7 +1088,7 @@ export default function AdminPage() {
   const fetchContent = async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase.from("content").select("id, title, type, thumbnail_url, views, likes, rank, creator_name").order("created_at", { ascending: false })
+      const { data, error } = await getSupabase().from("content").select("id, title, type, thumbnail_url, views, likes, rank, creator_name").order("created_at", { ascending: false })
       if (error) { logSupabaseError("fetchContent", error); return }
       setContent((data as ContentItem[]) ?? [])
     } catch (err) {
@@ -1102,19 +1103,19 @@ export default function AdminPage() {
   const handleRank = async (id: string, rank: number | null) => {
     try {
       if (rank === null) {
-        const { error } = await supabase.from("content").update({ rank: null }).eq("id", id)
+        const { error } = await getSupabase().from("content").update({ rank: null }).eq("id", id)
         if (error) { logSupabaseError("handleRank remove", error); return }
       } else {
         const target = content.find((item) => item.id === id)
         if (target?.type) {
-          const { error: clearTypeError } = await supabase.from("content").update({ rank: null }).eq("type", target.type).eq("rank", rank).neq("id", id)
+          const { error: clearTypeError } = await getSupabase().from("content").update({ rank: null }).eq("type", target.type).eq("rank", rank).neq("id", id)
           if (clearTypeError) { logSupabaseError("handleRank clear same-type", clearTypeError); return }
         }
-        const { error: setRankError } = await supabase.from("content").update({ rank }).eq("id", id)
+        const { error: setRankError } = await getSupabase().from("content").update({ rank }).eq("id", id)
         if (setRankError?.code === "23505") {
-          const { error: clearGlobalError } = await supabase.from("content").update({ rank: null }).eq("rank", rank).neq("id", id)
+          const { error: clearGlobalError } = await getSupabase().from("content").update({ rank: null }).eq("rank", rank).neq("id", id)
           if (clearGlobalError) { logSupabaseError("handleRank clear global", clearGlobalError); return }
-          const { error: retrySetRankError } = await supabase.from("content").update({ rank }).eq("id", id)
+          const { error: retrySetRankError } = await getSupabase().from("content").update({ rank }).eq("id", id)
           if (retrySetRankError) { logSupabaseError("handleRank retry set", retrySetRankError); return }
         } else if (setRankError) {
           logSupabaseError("handleRank set", setRankError); return
@@ -1131,7 +1132,7 @@ export default function AdminPage() {
   const handleDelete = async (id: string) => {
     setIsDeleting(true)
     try {
-      const { error } = await supabase.from("content").delete().eq("id", id)
+      const { error } = await getSupabase().from("content").delete().eq("id", id)
       if (error) { logSupabaseError("handleDelete", error); return }
       await fetchContent()
     } catch (err) {
@@ -1145,7 +1146,7 @@ export default function AdminPage() {
 
   const openRank   = (item: ContentItem) => { setRankItem(item); setRankModalOpen(true) }
   const openDelete = (id: string)        => { setDeleteId(id);   setDeleteModalOpen(true) }
-  const handleLogout = async () => { await supabase.auth.signOut(); setAuthed(false) }
+  const handleLogout = async () => { await getSupabase().auth.signOut(); setAuthed(false) }
 
   if (!authChecked) {
     return (
